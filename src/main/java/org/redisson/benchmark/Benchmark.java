@@ -15,6 +15,7 @@
  */
 package org.redisson.benchmark;
 
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -24,6 +25,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import com.codahale.metrics.ConsoleReporter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.SharedMetricRegistries;
+
+import jodd.util.RandomString;
 
 /**
  * 
@@ -47,7 +50,7 @@ public class Benchmark {
         int threads = 64;
         int iteration = 100000;
         int connections = 10;
-        String host = "127.0.0.1:6379";
+        String host = "redis://127.0.0.1:6379";
         if (args.length > 0) {
             threads = Integer.valueOf(args[0]); //64;
             iteration = Integer.valueOf(args[1]);//100;
@@ -70,8 +73,6 @@ public class Benchmark {
                     .convertDurationsTo(TimeUnit.MICROSECONDS)
                     .build();
             
-            final CountDownLatch l = new CountDownLatch(threadsAmount);
-            final AtomicBoolean print = new AtomicBoolean();
             final int len = String.valueOf(iterations).length();
             for (int i = 0; i < threadsAmount; i++) {
                 final int threadNumber = i;
@@ -80,23 +81,22 @@ public class Benchmark {
                     public void run() {
                         for (int j = 0; j < iterations; j++) {
                             String data = String.format("%1$" + len + "s", j);
+//                            String data = new RandomString(ThreadLocalRandom.current()).randomNumeric(15*1024);
                             bench.executeOperation(data, client, threadNumber, j, metrics);
                         }
-                        if (print.compareAndSet(false, true)) {
-                            System.out.println("Threads: " + threadsAmount);
-                            reporter.report();
-                        }
-                        
-                        l.countDown();
                     }
                     
                 });
             }
-            l.await();
             
             SharedMetricRegistries.remove("redisson");
             
             e.shutdown();
+            if (e.awaitTermination(30, TimeUnit.MINUTES)) {
+                System.out.println("Threads: " + threadsAmount);
+                reporter.report();
+            }
+
             bench.shutdown(client);
         }
         
